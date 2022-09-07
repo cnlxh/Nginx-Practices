@@ -1,0 +1,190 @@
+环境介绍：
+
+| 操作系统       | IP地址           | Nginx版本 | 维护人 | 联系QQ      | 联系微信     |
+| ---------- | -------------- | ------- | --- | --------- | -------- |
+| CentOS 8.5 | 192.168.30.200 | 1.22.0  | 李晓辉 | 939958092 | Lxh_Chat |
+
+# 基本概念
+
+## Nginx 软件安装
+
+1. 准备仓库
+   
+   ```bash
+   cat > /etc/yum.repos.d/nginx.repo <<EOF
+   [nginx]
+   name=nginx repo
+   baseurl=http://nginx.org/packages/centos/8/x86_64/
+   gpgcheck=0
+   enabled=1
+   EOF
+   ```
+
+2. 安装软件
+   
+   ```bash
+   [root@host1 ~]# yum install nginx
+   nginx repo                                                                                                                            34 kB/s |  43 kB     00:01
+   Dependencies resolved.
+   =====================================================================================================================================================================
+    Package                             Architecture                         Version                                          Repository                           Size
+   =====================================================================================================================================================================
+   Installing:
+    nginx                               x86_64                               1:1.22.0-1.el8.ngx                               nginx                               827 k
+   
+   Transaction Summary
+   =====================================================================================================================================================================
+   Install  1 Package
+   Is this ok [y/N]: y
+   ...
+   Installed:
+     nginx-1:1.22.0-1.el8.ngx.x86_64
+   Complete!
+   
+   
+   
+   ```
+
+3. 启用并启动服务
+   
+   ```bash
+   [root@host1 ~]# systemctl enable nginx
+   Created symlink /etc/systemd/system/multi-user.target.wants/nginx.service → /usr/lib/systemd/system/nginx.service.
+   [root@host1 ~]# systemctl start nginx
+   [root@host1 ~]# systemctl status nginx
+   ● nginx.service - nginx - high performance web server
+      Loaded: loaded (/usr/lib/systemd/system/nginx.service; enabled; vendor preset: disabled)
+      Active: active (running) since Wed 2022-09-07 02:26:14 EDT; 4s ago
+        Docs: http://nginx.org/en/docs/
+     Process: 34226 ExecStart=/usr/sbin/nginx -c /etc/nginx/nginx.conf (code=exited, status=0/SUCCESS)
+    Main PID: 34227 (nginx)
+       Tasks: 17 (limit: 49178)
+      Memory: 16.9M
+      CGroup: /system.slice/nginx.service
+              ├─34227 nginx: master process /usr/sbin/nginx -c /etc/nginx/nginx.conf
+              ├─34228 nginx: worker process
+              ├─34229 nginx: worker process
+              ├─34230 nginx: worker process
+              ├─34231 nginx: worker process
+              ├─34232 nginx: worker process
+              ├─34233 nginx: worker process
+              ├─34234 nginx: worker process
+              ├─34235 nginx: worker process
+              ├─34236 nginx: worker process
+              ├─34237 nginx: worker process
+              ├─34238 nginx: worker process
+              ├─34239 nginx: worker process
+              ├─34240 nginx: worker process
+              ├─34241 nginx: worker process
+              ├─34242 nginx: worker process
+              └─34243 nginx: worker process
+   
+   Sep 07 02:26:14 host1.xiaohui.cn systemd[1]: Starting nginx - high performance web server...
+   Sep 07 02:26:14 host1.xiaohui.cn systemd[1]: Started nginx - high performance web server.
+   
+   
+   ```
+
+4. 开通防火墙
+   
+   ```bash
+   firewall-cmd --add-service=http --permanent
+   success
+   firewall-cmd --reload
+   success
+   
+   
+   ```
+
+## 关键文件、目录和命令
+
+### /etc/nginx/
+
+Nginx服务器的默认配置根目录，含有一些具体有效的配置文件
+
+### /etc/nginx/nginx.conf
+
+Nginx使用的默认配置文件，包含一些全局设定，例如：worker进程，调优、日志、加载动态模块以及引用其他Nginx配置文件，默认情况下，本文件会包含一些顶级的http块，包含一些配置文件定义。
+
+### /etc/nginx/conf.d/
+
+在/etc/nginx/nginx.conf的顶级http块中定义了在本文件夹中任何以.conf后缀结尾的文件都将作为配置文件加载，尽量使文件名保持易读、容易理解，可以更好的帮助我们整理配置文件。
+
+### /var/log/nginx/
+
+Nginx的默认日志位置，通常包含一个access.log文件和一个error.log文件，access.log包含NGINX服务的每个请求记录。error.log文件包含错误记录，如果打开调试模块，则显示事件信息和调试信息。
+
+## Nginx 命令
+
+### nginx -h
+
+显示nginx帮助信息
+
+### nginx -v
+
+显示nginx版本
+
+### nginx -V
+
+显示nginx版本、构建信息、配置参数，也包含一些模块启用情况
+
+### nginx -t
+
+测试nginx配置
+
+### nginx -T
+
+测试nginx配置并显示出生效的配置
+
+### nginx -s *signal*
+
+发送signal到nginx 的master进程，我们可以发生诸如stop、quit、reload、reopen等信号：
+
+1. stop：立刻结束nginx进程
+
+2. quit：处理完现有任务后即可结束nginx进程
+
+3. reload：重新加载配置文件
+
+4. reopen：重新打开日志文件
+
+## 提供静态内容
+
+```bash
+cat > /etc/nginx/conf.d/static.conf <<EOF
+server {
+ listen 80 default_server; 
+ server_name www.xiaohui.cn; 
+ location / {
+ root /usr/share/nginx/html;
+ # alias /usr/share/nginx/html;
+ index index.html index.htm;
+ }
+}
+EOF
+
+```
+
+1. 第一行的server {}告诉nginx，这里定义了一个新的上下文，也就是说定义了一个新的网站
+
+2. 在http 80端口上提供静态网站服务
+
+3. 本网站对外显示的内容位于服务器的/usr/share/nginx/html
+
+4. default_server参数是指，将本网站作为80端口的默认响应
+
+5. server_name 这里定义了本网站对外的网址是多少，如果没有定义default_server，Nginx就会根据请求中的header来看哪个网站满足要求，如果定义了default_server，本配置文件中就可以忽略server_name参数
+
+6. location 定义了一个基本的路径，这个路径通常位于域名的后方，例如域名为xiaohui.cn，location定义的为/abc，那访问xiaohui.cn/abc就可以访问到此内容，如果写/，那就是以网站根目录进行响应
+
+7. index 定义了具体的网站首页文件
+
+## 优雅重载Nginx
+
+```bash
+nginx -s reload
+```
+
+给nginx发送reload信号，可以不中断nginx进程的情况下重载配置文件
+
+
