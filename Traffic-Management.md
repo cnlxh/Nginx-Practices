@@ -119,8 +119,6 @@ host3 page
 
 https://www.maxmind.com/en/accounts/current/geoip/downloads
 
-
-
 我把数据放到了/usr/local/geoip
 
 ```bash
@@ -153,23 +151,81 @@ enabled=1
 gpgcheck=0
 name=epel-repo
 EOF
-
 ```
 
 ```bash
 yum -y install gcc redhat-rpm-config.noarch pcre-devel openssl openssl-devel \
 libxml2 libxml2-devel libxslt-devel gd-devel perl-devel perl-ExtUtils-Embed \
-GeoIP GeoIP-devel GeoIP-data make
+libmaxminddb-devel GeoIP GeoIP-devel GeoIP-data make
+```
+
+```bash
 wget http://nginx.org/download/nginx-1.22.0.tar.gz
+wget https://github.com/leev/ngx_http_geoip2_module/archive/refs/heads/master.zip
 tar xf nginx-1.22.0.tar.gz
+unzip -d /usr/lib64/nginx/modules/ master.zip
 cd nginx-1.22.0
 nginx -V
 # 然后复制configure后面的参数，替换XXXX
-./configure --XXXX
-make
+./configure --XXXX --add-dynamic-module=/usr/lib64/nginx/modules/ngx_http_geoip2_module-master
+make -j 10
+cp objs/*.so /usr/lib64/nginx/modules/
 systemctl stop nginx
 cp objs/nginx /usr/sbin
 systemctl restart nginx
 ```
+
+在主配置文件中的http段上方加载这个模块
+
+```bash
+vim /etc/nginx/nginx.conf
+...
+load_module modules/ngx_http_geoip2_module.so;
+http {}
+```
+
+```bash
+cat > /etc/nginx/conf.d/geo.conf <<'EOF'
+geoip2 /opt/GeoLite2-Country.mmdb {
+   $geoip2_country_code country iso_code;
+}
+geoip2 /opt/GeoLite2-City.mmdb {
+    $geoip2_city_names location time_zone;
+}
+map $geoip2_country_code $allowed_country {
+    default yes;
+    CN no;
+}
+map $geoip2_city_names $allowed_city {
+    default yes;
+    Asia/Shanghai no;
+}
+server {
+ listen 80;
+ server_name httpha.xiaohui.cn;
+ location / {
+ root /aa;
+ index index.html;
+ }
+if ( $allowed_city = no ) { return 403; }
+if ( $allowed_country = no ) { return 403; }
+
+}
+EOF
+
+
+```
+
+```bash
+systemctl restart nginx
+```
+
+从上海访问将会拒绝，显示403
+
+
+
+在Nginx前还有其他代理的话。可以通过Nginx的 X-Forwarded-For header进行递归查找分析源IP
+
+未完待续
 
 
