@@ -356,8 +356,6 @@ EOF
         }
       ]
   }
-
-
 ```
 
 ```bash
@@ -387,7 +385,6 @@ server {
  }
 }
 EOF
-
 ```
 
 需要注意的是，如果你的index.html太小，可能看上去这个限制不会生效，所以不要用echo的方式去生成，可以考虑dd命令
@@ -398,7 +395,7 @@ dd if=/dev/zero of=/aa/index.html bs=1M count=20
 
 测试连接数限制
 
-一共访问20次，每次并发2个请求，就会有一个失败，但是每次并发一个请求，就会都成功
+一共访问20次，每次并发2个请求，可以看到非2XX开头的失败有19个，只有一个成功，但是每次并发一个请求，就会都成功
 
 ```bash
 yum install httpd-tools -y
@@ -493,6 +490,234 @@ Percentage of the requests served within a certain time (ms)
   98%      9
   99%      9
  100%      9 (longest request)
+```
+
+# 限制客户端请求速率
+
+## 简单限制请求速率
+
+此处限速为一秒只能处理一个request: 1r/s，超过就会返回HTTP 429
+
+```bash
+cat > /etc/nginx/conf.d/limitreq.conf <<'EOF'
+limit_req_zone $binary_remote_addr zone=limitbyaddr:10m rate=1r/s;
+limit_req_status 429;
+server {
+ listen 80 default_server;
+ limit_req zone=limitbyaddr;
+ location / {
+ root /aa;
+ index index.html;
+ }
+}
+EOF
+```
+
+测试请求速率
+
+一共快速发起2个请求，但是其中有一个失败了
+
+```bash
+[root@host1 ~]# ab -n 2 http://127.0.0.1/
+This is ApacheBench, Version 2.3 <$Revision: 1843412 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 127.0.0.1 (be patient).....done
+
+
+Server Software:        nginx/1.22.0
+Server Hostname:        127.0.0.1
+Server Port:            80
+
+Document Path:          /
+Document Length:        17 bytes
+
+Concurrency Level:      1
+Time taken for tests:   0.000 seconds
+Complete requests:      2
+Failed requests:        1
+   (Connect: 0, Receive: 0, Length: 1, Exceptions: 0)
+Non-2xx responses:      1
+Total transferred:      575 bytes
+HTML transferred:       186 bytes
+Requests per second:    4587.16 [#/sec] (mean)
+Time per request:       0.218 [ms] (mean)
+Time per request:       0.218 [ms] (mean, across all concurrent requests)
+Transfer rate:          1287.90 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.0      0       0
+Processing:     0    0   0.1      0       0
+Waiting:        0    0   0.1      0       0
+Total:          0    0   0.1      0       0
+
+Percentage of the requests served within a certain time (ms)
+  50%      0
+  66%      0
+  75%      0
+  80%      0
+  90%      0
+  95%      0
+  98%      0
+  99%      0
+ 100%      0 (longest request)
+```
+
+查看日志
+
+```bash
+2022/09/09 19:45:49 [error] 180198#180198: *11 limiting requests, excess: 1.000 by zone "limitbyaddr", client: 127.0.0.1, server: , request: "GET / HTTP/1.0", host: "127.0.0.1"
+```
+
+## 两段式限制请求速率
+
+在某些情况下，客户端需要短时间同时发出许多请求，然后就会趋于平静，这种情况下可以使用关键字参数burst允许客户端超过其速率限制，但不拒绝请求，超过速率的请求将在处理过程中延迟，以匹配速率限制
+
+本例中，将burst设置为10，以允许有10个额外请求作为缓冲地带
+
+```bash
+cat > /etc/nginx/conf.d/limitreq.conf <<'EOF'
+limit_req_zone $binary_remote_addr zone=limitbyaddr:10m rate=1r/s;
+limit_req_status 429;
+server {
+ listen 80 default_server;
+ limit_req zone=limitbyaddr burst=10;
+ location / {
+ root /aa;
+ index index.html;
+ }
+}
+EOF
+```
+
+测试缓冲效果，我们设置了每秒处理一个，然后额外缓冲10个，然后一共可以有11个不会拒绝，所以一共发起13个请求中，失败了2个
+
+```bash
+[root@host1 ~]# ab -n 13 -c 13 http://127.0.0.1/
+This is ApacheBench, Version 2.3 <$Revision: 1843412 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 127.0.0.1 (be patient).....done
+
+
+Server Software:        nginx/1.22.0
+Server Hostname:        127.0.0.1
+Server Port:            80
+
+Document Path:          /
+Document Length:        17 bytes
+
+Concurrency Level:      13
+Time taken for tests:   10.001 seconds
+Complete requests:      13
+Failed requests:        2
+   (Connect: 0, Receive: 0, Length: 2, Exceptions: 0)
+Non-2xx responses:      2
+Total transferred:      3382 bytes
+HTML transferred:       525 bytes
+Requests per second:    1.30 [#/sec] (mean)
+Time per request:       10001.269 [ms] (mean)
+Time per request:       769.328 [ms] (mean, across all concurrent requests)
+Transfer rate:          0.33 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.1      0       0
+Processing:     0 4231 3562.8   4501   10001
+Waiting:        0 4231 3562.9   4501   10001
+Total:          0 4232 3562.8   4501   10001
+
+Percentage of the requests served within a certain time (ms)
+  50%   4002
+  66%   6001
+  75%   7001
+  80%   8001
+  90%   9001
+  95%  10001
+  98%  10001
+  99%  10001
+ 100%  10001 (longest request)
+```
+
+在这里，我们可以使用delay和nodelay来处理延迟与否，见下方例子，最多可以接受20个请求，前9个请求将无延迟处理，第10到第20个请求将加入到delay中进行延迟。
+
+```bash
+cat > /etc/nginx/conf.d/limitreq.conf <<'EOF'
+limit_req_zone $binary_remote_addr zone=limitbyaddr:10m rate=1r/s;
+limit_req_status 429;
+server {
+ listen 80 default_server;
+ limit_req zone=limitbyaddr burst=20 delay=9;
+ location / {
+ root /aa;
+ index index.html;
+ }
+}
+EOF
+```
+
+虽然burst和delay使得业务流量在突发时不至于拒绝的太猛，但同时也带来了延迟，如果不能有太多延迟，可以使用nodelay参数，见下方例子
+
+```bash
+cat > /etc/nginx/conf.d/limitreq.conf <<'EOF'
+limit_req_zone $binary_remote_addr zone=limitbyaddr:10m rate=1r/s;
+limit_req_status 429;
+server {
+ listen 80 default_server;
+ limit_req zone=limitbyaddr burst=20 nodelay;
+ location / {
+ root /aa;
+ index index.html;
+ }
+}
+EOF
+```
+
+# 限制带宽速率
+
+limit_rate和 limit_rate_after两个参数可以用来限制带宽
+
+我这里针对本网站的/lixiaohui二级目录做了限速，前10M的速度为满速，超过10M之后，限制为1M，我的网站根目录在/aa，所以我的二级目录就是/aa/lixiaohui
+
+```bash
+cat > /etc/nginx/conf.d/limitbandw.conf <<'EOF'
+server {
+ listen 80 default_server;
+ location /lixiaohui {
+   limit_rate_after 10m;
+   limit_rate 1m;
+ root /aa;
+ index index.html;
+ }
+}
+EOF
+
+```
+
+创建二级目录，并制作了一个2GB的文件
+
+```bash
+mkdir /aa/lixiaohui
+dd if=/dev/zero of=/aa/lixiaohui/index.html bs=1M count=2000
+systemctl restart nginx
+```
+
+测试带宽速率
+
+可以看到速度被限制在1.00MB/s
+
+```bash
+[root@host1 ~]# wget http://127.0.0.1/lixiaohui/index.html
+--2022-09-09 20:32:12--  http://127.0.0.1/lixiaohui/index.html
+Connecting to 127.0.0.1:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 2097152000 (2.0G) [text/html]
+Saving to: ‘index.html’
+
+index.html      3%[==>      ]  68.00M  1.00MB/s    eta 27m 29s
 ```
 
 
