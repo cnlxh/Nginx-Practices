@@ -8,3 +8,5 @@
 2、[负载均衡](https://gitee.com/cnlxh/nginx-guide/blob/master/High-Performance-Load-Balancing.md)
 
 3、[流量管理](https://gitee.com/cnlxh/nginx-guide/blob/master/Traffic-Management.md)
+
+4、[大规模可伸缩缓存服务](https://gitee.com/cnlxh/nginx-guide/blob/master/Massively-Scalable-Content-Caching.md)
