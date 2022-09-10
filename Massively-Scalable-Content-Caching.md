@@ -10,7 +10,7 @@
 
 ```bash
 cat >> /etc/hosts <<EOF
-192.168.30.200 httpha.xiaohui.cn httpha
+192.168.30.200 cache.xiaohui.cn cache
 192.168.30.200 host1.xiaohui.cn host1
 192.168.30.201 host2.xiaohui.cn host2
 192.168.30.202 host3.xiaohui.cn host3
@@ -23,21 +23,34 @@ EOF
 
 # 搭建缓存服务器
 
-我们在这里指定了缓存位置为/data/cache，并在level中指定了目录为二级目录，第一级是一位，第二级是两位，nginx使用哈希键作为文件名，共享内存名为lixiaohui且大小为20m，最大缓存50GB，自用户上次访问时间算起，7*24=168h为不活动时间，即可清除缓存，当有人访问本网站(AAA.AAA.AAA)时，内容将从xxx中获取，针对所有(any)http代码响应都进行缓存
+我们在这里指定了缓存位置为/data/cache，并在level中指定了目录为二级目录，第一级是一位，第二级是两位，nginx使用哈希键作为文件名，共享内存名为lixiaohui且大小为20m，最大缓存50GB，自用户上次访问时间算起，7*24=168h为不活动时间，即可清除缓存，当有人访问本网站(cache.xiaohui.cn)时，内容将从host2.xiaohui.cn中获取，针对所有(any)http代码响应都进行缓存
 
 ```bash
 cat > /etc/nginx/conf.d/cache.conf  <<EOF
 proxy_cache_path /data/cache levels=1:2 keys_zone=lixiaohui:20m max_size=50g inactive=168h;
 server {
  listen 80 default_server;
- server_name AAA.AAA.AAA;
+ server_name cache.xiaohui.cn;
  location / {
    proxy_cache lixiaohui;
    proxy_cache_valid any 168h;
-   proxy_pass http://XXX;
+   proxy_pass http://host2.xiaohui.cn;
  }
 }
 EOF
+```
+
+准备缓存目录
+
+```bash
+mkdir /data/cache -p
+semanage fcontext -a -t httpd_sys_rw_content_t '/data(/.*)'
+semanage permissive -a httpd_t
+restorecon -RvF /data/
+```
+
+```bash
+systemctl enable nginx --now
 ```
 
 # 缓存锁定机制
@@ -51,11 +64,11 @@ cat > /etc/nginx/conf.d/cache.conf  <<EOF
 proxy_cache_path /data/cache levels=1:2 keys_zone=lixiaohui:20m max_size=50g inactive=168h;
 server {
  listen 80 default_server;
- server_name AAA.AAA.AAA;
+ server_name cache.xiaohui.cn;
  location / {
    proxy_cache lixiaohui;
    proxy_cache_valid any 168h;
-   proxy_pass http://XXX;
+   proxy_pass http://host2.xiaohui.cn;
    proxy_cache_lock on;
    proxy_cache_lock_age 3s;
    proxy_cache_lock_timeout 6s;
@@ -75,11 +88,11 @@ cat > /etc/nginx/conf.d/cache.conf  <<'EOF'
 proxy_cache_path /data/cache levels=1:2 keys_zone=lixiaohui:20m max_size=50g inactive=168h;
 server {
  listen 80 default_server;
- server_name AAA.AAA.AAA;
+ server_name cache.xiaohui.cn;
  location / {
    proxy_cache lixiaohui;
    proxy_cache_valid any 168h;
-   proxy_pass http://XXX;
+   proxy_pass http://host2.xiaohui.cn;
    proxy_cache_lock on;
    proxy_cache_lock_age 3s;
    proxy_cache_lock_timeout 6s;
@@ -102,11 +115,11 @@ cat > /etc/nginx/conf.d/cache.conf  <<'EOF'
 proxy_cache_path /data/cache levels=1:2 keys_zone=lixiaohui:20m max_size=50g inactive=168h;
 server {
  listen 80 default_server;
- server_name AAA.AAA.AAA;
+ server_name cache.xiaohui.cn;
  location / {
    proxy_cache lixiaohui;
    proxy_cache_valid any 168h;
-   proxy_pass http://XXX;
+   proxy_pass http://host2.xiaohui.cn;
    proxy_cache_lock on;
    proxy_cache_lock_age 3s;
    proxy_cache_lock_timeout 6s;
@@ -119,23 +132,154 @@ EOF
 
 # 提升缓存性能
 
-使用客户端侧的cache-control header可以提升缓存性能，下例中，将会匹配任何以html、css、js后缀的文件，其内容将会缓存1年，并在header中添加cache-control等于public的消息头，这允许任何缓存服务器缓存其内容，如果是private，则只允许客户端缓存其内容。
+使用客户端侧的cache-control header可以提升缓存性能，下例中，其内容将会缓存1年，并在header中添加cache-control等于public的消息头，这允许任何缓存服务器缓存其内容，如果是private，则只允许客户端缓存其内容。
 
 ```bash
 cat > /etc/nginx/conf.d/cache.conf  <<'EOF'
 proxy_cache_path /data/cache levels=1:2 keys_zone=lixiaohui:20m max_size=50g inactive=168h;
 server {
  listen 80 default_server;
- server_name AAA.AAA.AAA;
- location ~* .(html|css|js)$ {
+ server_name cache.xiaohui.cn;
+ location / {
    expires 1y;
    add_header Cache-Control "public";
    proxy_cache lixiaohui;
    proxy_cache_valid any 168h;
-   proxy_pass http://XXX;
+   proxy_pass http://host2.xiaohui.cn;
 }
 }
 EOF
 ```
 
-未完待续
+# 允许清除缓存
+
+默认nginx并不支持清除缓存，需要重新编译nginx以支持此功能
+
+```bash
+cat > /etc/yum.repos.d/nginx-prep.repo <<EOF
+[baseostream]
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/centos/8-stream/BaseOS/x86_64/os/
+enabled=1
+gpgcheck=0
+name=baseo-stream
+
+[appstreamstream]
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/centos/8-stream/AppStream/x86_64/os/
+enabled=1
+gpgcheck=0
+name=appstream-stream
+
+[epel-repo]
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/epel/8/Everything/x86_64/
+enabled=1
+gpgcheck=0
+name=epel-repo
+EOF
+```
+
+```bash
+yum -y install gcc redhat-rpm-config.noarch pcre-devel openssl openssl-devel \
+libxml2 libxml2-devel libxslt-devel gd-devel perl-devel perl-ExtUtils-Embed make
+```
+
+```bash
+wget http://nginx.org/download/nginx-1.22.0.tar.gz
+wget http://labs.frickle.com/files/ngx_cache_purge-2.3.tar.gz
+tar xf nginx-1.22.0.tar.gz
+tar xf ngx_cache_purge-2.3.tar.gz
+cd nginx-1.22.0
+nginx -V
+# 然后复制configure后面的参数，替换XXXX
+./configure --XXXX --add-module=/root/ngx_cache_purge-2.3
+make
+systemctl stop nginx
+cp objs/nginx /usr/sbin/nginx
+systemctl restart nginx
+```
+
+这里添加了二级目录purge，并允许192.168.30.0/24来清除缓存
+
+假设资源地址为http://cache.xiaohui.cn/1.jpg，那清除缓存的路径是http://cache.xiaohui.cn/purge/1.jpg
+
+```bash
+cat > /etc/nginx/conf.d/cache.conf  <<'EOF'
+proxy_cache_path /data/cache levels=1:2 keys_zone=lixiaohui:20m max_size=50g inactive=168h;
+server {
+ listen 80 default_server;
+ server_name cache.xiaohui.cn;
+location ~ /purge(/.*) {
+    allow 192.168.30.0/24;
+    deny all;
+    proxy_cache_purge lixiaohui $host$1$is_args$args;
+}
+ location / {
+   expires 1y;
+   add_header Cache-Control "public";
+   proxy_cache lixiaohui;
+   proxy_cache_valid any 168h;
+   proxy_cache_key "$host$request_uri";
+   proxy_pass http://host2.xiaohui.cn;
+   add_header Nging-Cache "$upstream_cache_status";
+}
+}
+EOF
+```
+
+# 缓存切片
+
+```bash
+cat > /etc/nginx/conf.d/cache.conf  <<'EOF'
+proxy_cache_path /data/cache levels=1:2 keys_zone=lixiaohui:20m max_size=50g inactive=168h;
+server {
+ listen 80 default_server;
+ server_name cache.xiaohui.cn;
+location ~ /purge(/.*) {
+    allow 192.168.30.0/24;
+    deny all;
+    proxy_cache_purge lixiaohui $host$1$is_args$args;
+}
+ location / {
+   slice 1m;
+   proxy_set_header Range $slice_range;
+   proxy_http_version 1.1;
+   expires 1y;
+   add_header Cache-Control "public";
+   proxy_cache lixiaohui;
+   proxy_cache_valid any 168h;
+   proxy_cache_key "$host$request_uri$slice_range";
+   proxy_pass http://host2.xiaohui.cn;
+   add_header Nging-Cache "$upstream_cache_status";
+}
+}
+EOF
+```
+
+测试缓存分片效果
+
+可以看到 http响应码是206 Partial Content，Content-Length:  1048576，Content-Range: bytes 0-1048575/104857600，我们请求的长度是0-1048575，本文件最长为104857600
+
+```bash
+[root@host1 ~]# curl -I -r 0-1048575 http://cache.xiaohui.cn/aa.txt
+HTTP/1.1 206 Partial Content
+Server: nginx/1.22.0
+Date: Sat, 10 Sep 2022 07:10:27 GMT
+Content-Type: text/plain
+Content-Length: 1048576
+Connection: keep-alive
+Last-Modified: Sat, 10 Sep 2022 07:06:39 GMT
+ETag: "631c377f-6400000"
+Expires: Sun, 10 Sep 2023 07:10:27 GMT
+Cache-Control: max-age=31536000
+Cache-Control: public
+Nging-Cache: MISS
+Content-Range: bytes 0-1048575/104857600
+
+```
+
+可以看到本次访问是第一次访问，并未命中缓存，我们去host2上看一下日志，发现代码为206，返回给缓存服务器的长度为1048576
+
+```bash
+[root@host2 ~]# tail /var/log/nginx/access.log 
+192.168.30.200 - - [10/Sep/2022:03:08:21 -0400] "GET /aa.txt HTTP/1.1" 206 1048576 "-" "curl/7.61.1" "-"
+192.168.30.200 - - [10/Sep/2022:03:10:27 -0400] "GET /aa.txt HTTP/1.1" 206 1048576 "-" "curl/7.61.1" "-"
+```
