@@ -227,6 +227,8 @@ EOF
 
 # 缓存切片
 
+当网站上有一个很大的文件时，客户端如果直接请求这个很大的文件，对客户端以及服务器来讲，都是很大的压力，缓存切片做的事情就是把这个大文件切片成固定大小去后端服务器请求，然后以这个大小返回给客户端，客户端只需要按照这个大小去服务器申请即可，这样就从请求一个超大文件，变成了请求几个小文件
+
 ```bash
 cat > /etc/nginx/conf.d/cache.conf  <<'EOF'
 proxy_cache_path /data/cache levels=1:2 keys_zone=lixiaohui:20m max_size=50g inactive=168h;
@@ -273,7 +275,6 @@ Cache-Control: max-age=31536000
 Cache-Control: public
 Nging-Cache: MISS
 Content-Range: bytes 0-1048575/104857600
-
 ```
 
 可以看到本次访问是第一次访问，并未命中缓存，我们去host2上看一下日志，发现代码为206，返回给缓存服务器的长度为1048576
