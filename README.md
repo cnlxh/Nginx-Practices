@@ -11,4 +11,4 @@
 
 4、[大规模可伸缩缓存服务](https://gitee.com/cnlxh/nginx-guide/blob/master/4.Massively-Scalable-Content-Caching.md)
 
-6、[Nginx 基本认证]((https://gitee.com/cnlxh/nginx-guide/blob/master/6.Authentication.md)
+6、[Nginx 基本认证](https://gitee.com/cnlxh/nginx-guide/blob/master/6.Authentication.md)
