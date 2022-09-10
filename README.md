@@ -3,10 +3,12 @@
 
 目录：
 
-1、[Nginx 基本概念](https://gitee.com/cnlxh/nginx-guide/blob/master/nginx-basic.md)
+1、[Nginx 基本概念](https://gitee.com/cnlxh/nginx-guide/blob/master/1.Nginx-Basic.md)
 
-2、[负载均衡](https://gitee.com/cnlxh/nginx-guide/blob/master/High-Performance-Load-Balancing.md)
+2、[负载均衡](https://gitee.com/cnlxh/nginx-guide/blob/master/2.High-Performance-Load-Balancing.md)
 
-3、[流量管理](https://gitee.com/cnlxh/nginx-guide/blob/master/Traffic-Management.md)
+3、[流量管理](https://gitee.com/cnlxh/nginx-guide/blob/master/3.Traffic-Management.md)
 
-4、[大规模可伸缩缓存服务](https://gitee.com/cnlxh/nginx-guide/blob/master/Massively-Scalable-Content-Caching.md)
+4、[大规模可伸缩缓存服务](https://gitee.com/cnlxh/nginx-guide/blob/master/4.Massively-Scalable-Content-Caching.md)
+
+6、[Nginx 基本认证]((https://gitee.com/cnlxh/nginx-guide/blob/master/6.Authentication.md)
